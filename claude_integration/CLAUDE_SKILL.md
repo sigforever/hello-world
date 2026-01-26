@@ -122,6 +122,94 @@ GET /api/search?q=关键词
 
 ---
 
+## 方案四：Notion MCP 集成（推荐）
+
+使用 Notion MCP 让 Claude 直接操作你的 Notion 数据库，无需自建服务器。
+
+### 配置步骤
+
+1. 在 [Notion Integrations](https://www.notion.so/my-integrations) 创建 Integration
+2. 将 Integration 连接到你的「稍后阅读」数据库
+3. 配置 Claude Desktop 的 MCP 设置
+
+详细配置参见 [NOTION_MCP.md](./NOTION_MCP.md)
+
+### Claude Desktop 配置
+
+编辑 `~/Library/Application Support/Claude/claude_desktop_config.json`：
+
+```json
+{
+  "mcpServers": {
+    "notion": {
+      "command": "npx",
+      "args": ["@notionhq/notion-mcp-server"],
+      "env": {
+        "NOTION_API_KEY": "secret_xxxxxxxxxx"
+      }
+    }
+  }
+}
+```
+
+### 配合 MCP 的 Custom Instruction
+
+```
+你是我的稍后阅读助手，通过 Notion MCP 直接操作我的 Notion 数据库。
+
+## 数据库信息
+- 数据库名称：稍后阅读
+- 属性：标题(Title)、URL(URL)、摘要(Text)、状态(Select)、优先级(Select)、标签(Multi-select)
+
+## 核心功能
+
+### /read <链接>
+1. 获取链接内容，生成 100-200 字摘要
+2. 使用 notion_create_page 添加到数据库
+3. 设置属性：状态=未读，优先级=中
+4. 返回确认信息
+
+### /list
+1. 使用 notion_query_database 查询状态为「未读」或「阅读中」的文章
+2. 按优先级排序显示
+
+### /done <标题关键词>
+1. 使用 notion_search 搜索匹配的页面
+2. 使用 notion_update_page 更新状态为「已完成」
+
+### /note <标题> <笔记>
+为指定文章添加阅读笔记
+
+## 输出格式
+📚 **[标题]**
+🔗 [链接]
+📝 [摘要]
+✅ 已添加到 Notion
+
+## 注意事项
+- 操作 Notion 前先确认数据库连接正常
+- 如果找不到数据库，提示用户检查 Integration 连接
+```
+
+### 使用示例
+
+**用户:** 帮我把 https://example.com/react-guide 添加到稍后阅读
+
+**Claude 操作:**
+1. 获取网页内容
+2. 生成摘要
+3. 调用 `notion_create_page` 创建页面
+4. 返回成功确认
+
+**用户:** 显示我所有未读的高优先级文章
+
+**Claude 操作:**
+1. 调用 `notion_query_database` 查询
+2. 过滤：状态=未读，优先级=高
+3. 格式化显示结果
+
+---
+
 ## 使用示例
 
 ### 示例1：分析单个链接

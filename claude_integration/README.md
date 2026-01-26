@@ -14,7 +14,8 @@
 | A. Claude 纯对话 | 简单 | 链接摘要、分析 | 所有人 |
 | B. iOS 快捷指令 | 中等 | 分享菜单添加、自动提醒 | iPhone用户 |
 | C. API + 快捷指令 | 较高 | 完整功能、持久化存储 | 有服务器的用户 |
-| **D. Notion 集成** | 中等 | 同步到Notion数据库、跨设备 | Notion用户（推荐） |
+| D. Notion API 集成 | 中等 | 同步到Notion数据库 | 有服务器的用户 |
+| **E. Notion MCP** | 简单 | Claude直接操作Notion | Claude Desktop用户（推荐） |
 
 ---
 
@@ -167,6 +168,69 @@ GET /api/notion/search?q=React
 
 ---
 
+## 方案 E：Notion MCP（最推荐）
+
+使用 Notion MCP 让 Claude 直接操作你的 Notion，无需任何服务器！
+
+### 优势
+
+- **无需服务器** - Claude 直接与 Notion 通信
+- **实时操作** - 对话中直接创建/查询/更新
+- **简单配置** - 只需配置一次即可永久使用
+
+### 快速配置
+
+1. **创建 Notion Integration**
+   - 访问 https://www.notion.so/my-integrations
+   - 创建新 Integration，复制 Token
+
+2. **连接到数据库**
+   - 打开你的「稍后阅读」数据库
+   - 点击 `...` → `Add connections` → 选择你的 Integration
+
+3. **配置 Claude Desktop**
+
+   编辑 `~/Library/Application Support/Claude/claude_desktop_config.json`：
+
+   ```json
+   {
+     "mcpServers": {
+       "notion": {
+         "command": "npx",
+         "args": ["@notionhq/notion-mcp-server"],
+         "env": {
+           "NOTION_API_KEY": "secret_xxxxxxxxxx"
+         }
+       }
+     }
+   }
+   ```
+
+4. **重启 Claude Desktop**
+
+### 使用方式
+
+配置完成后，直接在 Claude 中说：
+
+```
+请把 https://example.com/article 添加到我的 Notion「稍后阅读」数据库，
+设置优先级为高，并生成摘要。
+```
+
+```
+查询我 Notion 中所有未读的高优先级文章。
+```
+
+```
+把「React 入门指南」这篇文章标记为已完成。
+```
+
+### 详细配置
+
+参见 [NOTION_MCP.md](./NOTION_MCP.md) 获取完整的 MCP 配置指南。
+
+---
+
 ## API 接口文档
 
 ### 添加链接
@@ -283,7 +347,8 @@ A: 数据库文件位于 `~/.readlater/readlater.db`，直接复制即可迁移�
 
 - `CLAUDE_SKILL.md` - Claude Custom Instruction 模板
 - `IOS_SHORTCUTS.md` - iOS 快捷指令详细配置
-- `NOTION_SETUP.md` - Notion 集成配置指南
+- `NOTION_SETUP.md` - Notion API 集成配置指南
+- `NOTION_MCP.md` - Notion MCP 配置指南（推荐）
 - `api_server.py` - API 服务器
 - `notion_sync.py` - Notion 同步模块
 - `reminder.py` - 推送通知支持

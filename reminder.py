@@ -140,6 +140,172 @@ class WebhookNotifier(ReminderNotifier):
             return False
 
 
+class PushoverNotifier(ReminderNotifier):
+    """Pushover 推送通知（支持 iOS/Android）"""
+
+    def __init__(self, user_key: str, api_token: str):
+        self.user_key = user_key
+        self.api_token = api_token
+        self.api_url = "https://api.pushover.net/1/messages.json"
+
+    def notify(self, articles: List[Article]) -> bool:
+        import requests
+
+        article_list = "\n".join([
+            f"• {a.title[:40]}" for a in articles[:5]
+        ])
+
+        message = f"您有 {len(articles)} 篇文章待阅读：\n\n{article_list}"
+
+        payload = {
+            "token": self.api_token,
+            "user": self.user_key,
+            "title": "📚 稍后阅读提醒",
+            "message": message,
+            "priority": 0,
+            "sound": "pushover"
+        }
+
+        try:
+            response = requests.post(self.api_url, data=payload, timeout=10)
+            return response.status_code == 200
+        except Exception as e:
+            print(f"Pushover通知失败: {e}")
+            return False
+
+
+class BarkNotifier(ReminderNotifier):
+    """Bark 推送通知（iOS，国内推荐）"""
+
+    def __init__(self, bark_url: str):
+        """
+        bark_url: 完整的Bark推送地址，如 https://api.day.app/your_key/
+        """
+        self.bark_url = bark_url.rstrip('/')
+
+    def notify(self, articles: List[Article]) -> bool:
+        import requests
+        from urllib.parse import quote
+
+        title = f"📚 {len(articles)}篇待阅读"
+        body_lines = [f"• {a.title[:35]}" for a in articles[:5]]
+        body = "\n".join(body_lines)
+
+        # Bark URL格式: https://api.day.app/key/title/body
+        url = f"{self.bark_url}/{quote(title)}/{quote(body)}"
+
+        try:
+            response = requests.get(url, timeout=10)
+            return response.status_code == 200
+        except Exception as e:
+            print(f"Bark通知失败: {e}")
+            return False
+
+
+class APNsNotifier(ReminderNotifier):
+    """Apple Push Notification service（需要开发者账号配置）"""
+
+    def __init__(self, key_file: str, key_id: str, team_id: str, bundle_id: str, device_token: str):
+        self.key_file = key_file
+        self.key_id = key_id
+        self.team_id = team_id
+        self.bundle_id = bundle_id
+        self.device_token = device_token
+
+    def notify(self, articles: List[Article]) -> bool:
+        try:
+            import jwt
+            import requests
+            from datetime import datetime, timedelta
+
+            # 读取私钥
+            with open(self.key_file, 'r') as f:
+                private_key = f.read()
+
+            # 生成JWT token
+            now = datetime.utcnow()
+            token = jwt.encode(
+                {
+                    'iss': self.team_id,
+                    'iat': now
+                },
+                private_key,
+                algorithm='ES256',
+                headers={
+                    'alg': 'ES256',
+                    'kid': self.key_id
+                }
+            )
+
+            # 构建推送内容
+            article_titles = [a.title[:30] for a in articles[:3]]
+            body = f"您有{len(articles)}篇文章待读: " + ", ".join(article_titles)
+
+            payload = {
+                "aps": {
+                    "alert": {
+                        "title": "📚 稍后阅读提醒",
+                        "body": body
+                    },
+                    "badge": len(articles),
+                    "sound": "default"
+                }
+            }
+
+            # 发送请求
+            headers = {
+                'authorization': f'bearer {token}',
+                'apns-topic': self.bundle_id,
+                'apns-push-type': 'alert'
+            }
+
+            url = f'https://api.push.apple.com/3/device/{self.device_token}'
+            response = requests.post(url, json=payload, headers=headers, timeout=10)
+
+            return response.status_code == 200
+        except Exception as e:
+            print(f"APNs通知失败: {e}")
+            return False
+
+
+class TelegramNotifier(ReminderNotifier):
+    """Telegram Bot 通知"""
+
+    def __init__(self, bot_token: str, chat_id: str):
+        self.bot_token = bot_token
+        self.chat_id = chat_id
+
+    def notify(self, articles: List[Article]) -> bool:
+        import requests
+
+        article_list = "\n".join([
+            f"• [{a.title[:40]}]({a.url})" for a in articles[:5]
+        ])
+
+        message = f"""📚 *稍后阅读提醒*
+
+您有 {len(articles)} 篇文章待阅读：
+
+{article_list}
+
+_点击标题直接阅读_"""
+
+        url = f"https://api.telegram.org/bot{self.bot_token}/sendMessage"
+        payload = {
+            "chat_id": self.chat_id,
+            "text": message,
+            "parse_mode": "Markdown",
+            "disable_web_page_preview": True
+        }
+
+        try:
+            response = requests.post(url, json=payload, timeout=10)
+            return response.status_code == 200
+        except Exception as e:
+            print(f"Telegram通知失败: {e}")
+            return False
+
+
 class ReminderService:
     """提醒服务"""
 

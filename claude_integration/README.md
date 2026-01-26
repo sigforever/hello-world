@@ -14,6 +14,7 @@
 | A. Claude 纯对话 | 简单 | 链接摘要、分析 | 所有人 |
 | B. iOS 快捷指令 | 中等 | 分享菜单添加、自动提醒 | iPhone用户 |
 | C. API + 快捷指令 | 较高 | 完整功能、持久化存储 | 有服务器的用户 |
+| **D. Notion 集成** | 中等 | 同步到Notion数据库、跨设备 | Notion用户（推荐） |
 
 ---
 
@@ -120,6 +121,49 @@ python app.py setup-reminder
 
 # 或使用 iOS 自动化（方案B）在每天固定时间调用 API
 ```
+
+---
+
+## 方案 D：Notion 集成（推荐）
+
+将文章同步到 Notion 数据库，享受 Notion 强大的整理和跨设备能力。
+
+### 快速配置
+
+```bash
+# 1. 获取 Notion Integration Token
+#    访问 https://www.notion.so/my-integrations 创建
+
+# 2. 配置环境变量
+export NOTION_TOKEN=secret_xxxxxxxxxxxxx
+export NOTION_DATABASE_ID=你的数据库ID
+export NOTION_SYNC_ENABLED=true  # 自动同步到Notion
+
+# 3. 启动服务器
+python api_server.py
+```
+
+### Notion API 接口
+
+```bash
+# 添加到 Notion
+POST /api/notion/articles
+{"url": "https://example.com", "priority": 2}
+
+# 获取 Notion 未读列表
+GET /api/notion/articles/unread?limit=10
+
+# 更新状态
+POST /api/notion/articles/<page_id>/status
+{"status": "finished"}
+
+# 搜索
+GET /api/notion/search?q=React
+```
+
+### 详细配置
+
+参见 [NOTION_SETUP.md](./NOTION_SETUP.md) 获取完整的 Notion 集成指南。
 
 ---
 
@@ -239,5 +283,7 @@ A: 数据库文件位于 `~/.readlater/readlater.db`，直接复制即可迁移�
 
 - `CLAUDE_SKILL.md` - Claude Custom Instruction 模板
 - `IOS_SHORTCUTS.md` - iOS 快捷指令详细配置
+- `NOTION_SETUP.md` - Notion 集成配置指南
 - `api_server.py` - API 服务器
+- `notion_sync.py` - Notion 同步模块
 - `reminder.py` - 推送通知支持

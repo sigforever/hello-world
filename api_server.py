@@ -17,6 +17,13 @@ from summarizer import process_url, ContentExtractor
 from reminder import ReminderService
 from config import Config
 
+# Notion 支持（可选）
+try:
+    from notion_sync import NotionSync, sync_to_notion, get_notion_unread_summary
+    NOTION_AVAILABLE = True
+except ImportError:
+    NOTION_AVAILABLE = False
+
 
 class ReadLaterAPI:
     """API业务逻辑层"""
@@ -26,9 +33,18 @@ class ReadLaterAPI:
         self.storage = Storage(self.config.get_db_path())
         self.reminder_service = ReminderService(self.storage, self.config)
 
-    def add_url(self, url: str, priority: int = 2, tags: str = "") -> dict:
+        # 初始化 Notion 同步
+        self.notion_sync = None
+        if NOTION_AVAILABLE and self.config.NOTION_TOKEN and self.config.NOTION_DATABASE_ID:
+            try:
+                self.notion_sync = NotionSync(self.config)
+            except Exception as e:
+                print(f"Notion 初始化失败: {e}")
+
+    def add_url(self, url: str, priority: int = 2, tags: str = "",
+                sync_notion: bool = None) -> dict:
         """添加新链接"""
-        # 检查是否已存在
+        # 检查是否已存在（本地数据库）
         existing = self.storage.get_article_by_url(url)
         if existing:
             return {
@@ -51,15 +67,27 @@ class ReadLaterAPI:
                 tags=tags.split(',') if tags else []
             )
 
-            # 保存到数据库
+            # 保存到本地数据库
             article_id = self.storage.add_article(article)
             article.id = article_id
 
-            return {
+            result = {
                 "success": True,
                 "message": "已添加到稍后阅读列表",
                 "article": self._article_to_dict(article)
             }
+
+            # 同步到 Notion
+            should_sync = sync_notion if sync_notion is not None else self.config.NOTION_SYNC_ENABLED
+            if should_sync and self.notion_sync:
+                try:
+                    notion_result = self.notion_sync.add_article(article)
+                    result["notion"] = notion_result
+                    result["message"] += " (已同步到 Notion)"
+                except Exception as e:
+                    result["notion_error"] = str(e)
+
+            return result
 
         except Exception as e:
             return {
@@ -203,6 +231,136 @@ class ReadLaterAPI:
             "read_at": article.read_at.isoformat() if article.read_at else None
         }
 
+    # ========== Notion 相关方法 ==========
+
+    def notion_add_url(self, url: str, priority: int = 2, tags: str = "") -> dict:
+        """直接添加链接到 Notion（不保存到本地）"""
+        if not self.notion_sync:
+            return {"success": False, "error": "Notion 未配置或不可用"}
+
+        try:
+            # 提取内容和生成摘要
+            title, content, summary = process_url(url, self.config)
+
+            # 创建文章对象
+            article = Article(
+                url=url,
+                title=title,
+                content=content,
+                summary=summary,
+                priority=Priority(priority),
+                tags=tags.split(',') if tags else []
+            )
+
+            # 检查 Notion 中是否已存在
+            existing = self.notion_sync.find_by_url(url)
+            if existing:
+                return {
+                    "success": False,
+                    "error": "链接已存在于 Notion",
+                    "page_id": existing.get("id")
+                }
+
+            # 添加到 Notion
+            result = self.notion_sync.add_article(article)
+            return result
+
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def notion_get_unread(self, limit: int = 10) -> dict:
+        """获取 Notion 中的未读文章"""
+        if not self.notion_sync:
+            return {"success": False, "error": "Notion 未配置或不可用"}
+
+        try:
+            return get_notion_unread_summary(self.config, limit)
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def notion_get_articles(self, status: str = None, limit: int = 50) -> dict:
+        """获取 Notion 中的文章列表"""
+        if not self.notion_sync:
+            return {"success": False, "error": "Notion 未配置或不可用"}
+
+        try:
+            status_filter = None
+            if status:
+                try:
+                    status_filter = ReadStatus(status)
+                except ValueError:
+                    return {"success": False, "error": f"无效的状态: {status}"}
+
+            articles = self.notion_sync.get_all_articles(status_filter, limit)
+            return {
+                "success": True,
+                "count": len(articles),
+                "articles": [
+                    {
+                        "title": a.title,
+                        "url": a.url,
+                        "summary": a.summary,
+                        "status": a.status.value,
+                        "priority": a.priority.value,
+                        "tags": a.tags,
+                        "notion_page_id": getattr(a, '_notion_page_id', None)
+                    }
+                    for a in articles
+                ]
+            }
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def notion_update_status(self, page_id: str, status: str) -> dict:
+        """更新 Notion 中文章的状态"""
+        if not self.notion_sync:
+            return {"success": False, "error": "Notion 未配置或不可用"}
+
+        try:
+            new_status = ReadStatus(status)
+        except ValueError:
+            return {"success": False, "error": f"无效的状态: {status}"}
+
+        try:
+            return self.notion_sync.update_status(page_id, new_status)
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def notion_search(self, keyword: str) -> dict:
+        """在 Notion 中搜索文章"""
+        if not self.notion_sync:
+            return {"success": False, "error": "Notion 未配置或不可用"}
+
+        try:
+            articles = self.notion_sync.search_articles(keyword)
+            return {
+                "success": True,
+                "keyword": keyword,
+                "count": len(articles),
+                "articles": [
+                    {
+                        "title": a.title,
+                        "url": a.url,
+                        "summary": a.summary,
+                        "notion_page_id": getattr(a, '_notion_page_id', None)
+                    }
+                    for a in articles
+                ]
+            }
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def notion_stats(self) -> dict:
+        """获取 Notion 统计信息"""
+        if not self.notion_sync:
+            return {"success": False, "error": "Notion 未配置或不可用"}
+
+        try:
+            stats = self.notion_sync.get_statistics()
+            return {"success": True, "statistics": stats}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
 
 class APIHandler(BaseHTTPRequestHandler):
     """HTTP请求处理器"""
@@ -282,14 +440,36 @@ class APIHandler(BaseHTTPRequestHandler):
             result = self.api.get_stats()
 
         elif path == '/api/health':
-            result = {"success": True, "status": "healthy", "version": "1.0.0"}
+            result = {"success": True, "status": "healthy", "version": "1.1.0",
+                     "notion_enabled": self.api.notion_sync is not None}
+
+        # Notion 相关路由
+        elif path == '/api/notion/articles':
+            status = query.get('status', [None])[0]
+            limit = int(query.get('limit', [50])[0])
+            result = self.api.notion_get_articles(status, limit)
+
+        elif path == '/api/notion/articles/unread':
+            limit = int(query.get('limit', [10])[0])
+            result = self.api.notion_get_unread(limit)
+
+        elif path == '/api/notion/search':
+            keyword = query.get('q', [''])[0]
+            if not keyword:
+                result = {"success": False, "error": "Missing search keyword"}
+            else:
+                result = self.api.notion_search(keyword)
+
+        elif path == '/api/notion/stats':
+            result = self.api.notion_stats()
 
         elif path == '/':
             result = {
                 "name": "ReadLater API",
-                "version": "1.0.0",
+                "version": "1.1.0",
+                "notion_enabled": self.api.notion_sync is not None,
                 "endpoints": {
-                    "POST /api/articles": "添加新链接",
+                    "POST /api/articles": "添加新链接（可选同步到Notion）",
                     "POST /api/summarize": "仅获取链接摘要（不保存）",
                     "GET /api/articles": "获取文章列表",
                     "GET /api/articles/unread": "获取未读文章摘要",
@@ -298,6 +478,14 @@ class APIHandler(BaseHTTPRequestHandler):
                     "DELETE /api/articles/<id>": "删除文章",
                     "GET /api/search?q=keyword": "搜索文章",
                     "GET /api/stats": "获取统计信息"
+                },
+                "notion_endpoints": {
+                    "POST /api/notion/articles": "添加链接到Notion",
+                    "GET /api/notion/articles": "获取Notion文章列表",
+                    "GET /api/notion/articles/unread": "获取Notion未读文章",
+                    "POST /api/notion/articles/<page_id>/status": "更新Notion文章状态",
+                    "GET /api/notion/search?q=keyword": "搜索Notion文章",
+                    "GET /api/notion/stats": "获取Notion统计信息"
                 }
             }
         else:
@@ -330,7 +518,8 @@ class APIHandler(BaseHTTPRequestHandler):
             else:
                 priority = body.get('priority', 2)
                 tags = body.get('tags', '')
-                result = self.api.add_url(url, priority, tags)
+                sync_notion = body.get('sync_notion')
+                result = self.api.add_url(url, priority, tags, sync_notion)
 
         elif path == '/api/summarize':
             url = body.get('url')
@@ -338,6 +527,24 @@ class APIHandler(BaseHTTPRequestHandler):
                 result = {"success": False, "error": "Missing URL"}
             else:
                 result = self.api.summarize_url_only(url)
+
+        # Notion 相关 POST 路由
+        elif path == '/api/notion/articles':
+            url = body.get('url')
+            if not url:
+                result = {"success": False, "error": "Missing URL"}
+            else:
+                priority = body.get('priority', 2)
+                tags = body.get('tags', '')
+                result = self.api.notion_add_url(url, priority, tags)
+
+        elif '/api/notion/articles/' in path and path.endswith('/status'):
+            page_id = path.split('/')[-2]
+            status = body.get('status')
+            if not status:
+                result = {"success": False, "error": "Missing status"}
+            else:
+                result = self.api.notion_update_status(page_id, status)
 
         elif path.endswith('/status'):
             try:
@@ -386,17 +593,27 @@ class APIHandler(BaseHTTPRequestHandler):
 def run_server(host='0.0.0.0', port=8080):
     """启动API服务器"""
     server = HTTPServer((host, port), APIHandler)
+
+    # 检查 Notion 状态
+    config = Config()
+    notion_status = "已启用 ✓" if (config.NOTION_TOKEN and config.NOTION_DATABASE_ID) else "未配置"
+
     print(f"""
 ╔══════════════════════════════════════════════════════════════╗
-║           📚 ReadLater API Server                             ║
+║           📚 ReadLater API Server v1.1.0                      ║
 ╠══════════════════════════════════════════════════════════════╣
 ║  服务地址: http://{host}:{port}
 ║  API文档: http://{host}:{port}/
+║  Notion:  {notion_status}
 ║
 ║  快速开始:
 ║  - 添加链接: POST /api/articles {{"url": "..."}}
 ║  - 获取摘要: POST /api/summarize {{"url": "..."}}
 ║  - 未读列表: GET /api/articles/unread
+║
+║  Notion 接口:
+║  - 添加到Notion: POST /api/notion/articles {{"url": "..."}}
+║  - Notion未读:   GET /api/notion/articles/unread
 ╚══════════════════════════════════════════════════════════════╝
     """)
 

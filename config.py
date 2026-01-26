@@ -47,9 +47,14 @@ class Config:
     API_PORT = int(os.environ.get('READLATER_API_PORT', '8080'))
     API_KEY = os.environ.get('READLATER_API_KEY', '')  # API密钥，留空则不验证
 
+    # Notion 配置
+    NOTION_TOKEN = os.environ.get('NOTION_TOKEN', '')  # Notion Integration Token
+    NOTION_DATABASE_ID = os.environ.get('NOTION_DATABASE_ID', '')  # 数据库ID
+    NOTION_SYNC_ENABLED = os.environ.get('NOTION_SYNC_ENABLED', 'false').lower() == 'true'
+
     # 应用配置
     APP_NAME = "ReadLater"
-    VERSION = "1.0.0"
+    VERSION = "1.1.0"
 
     @classmethod
     def get_config_path(cls) -> Path:
@@ -94,6 +99,11 @@ class Config:
 ║ API服务器:                                                 ║
 ║   地址:         {cls.API_HOST}:{cls.API_PORT:<33} ║
 ║   API密钥:      {'已设置' if cls.API_KEY else '未设置(开放访问)':<40} ║
+╠══════════════════════════════════════════════════════════╣
+║ Notion 配置:                                              ║
+║   Token:        {'已设置' if cls.NOTION_TOKEN else '未设置':<40} ║
+║   数据库ID:     {'已设置' if cls.NOTION_DATABASE_ID else '未设置':<40} ║
+║   同步状态:     {'已启用' if cls.NOTION_SYNC_ENABLED else '未启用':<40} ║
 ╚══════════════════════════════════════════════════════════╝
 
 环境变量设置示例:
@@ -105,6 +115,11 @@ class Config:
   export READLATER_BARK_URL=https://api.day.app/your_key
   export READLATER_PUSHOVER_USER=xxx
   export READLATER_PUSHOVER_TOKEN=xxx
+
+  # Notion 集成
+  export NOTION_TOKEN=secret_xxx
+  export NOTION_DATABASE_ID=xxx
+  export NOTION_SYNC_ENABLED=true
 
   # API服务器
   export READLATER_API_KEY=your_secret_key

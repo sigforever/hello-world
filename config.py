@@ -31,9 +31,30 @@ class Config:
     # Webhook 配置（可选）
     WEBHOOK_URL = os.environ.get('READLATER_WEBHOOK_URL', '')
 
+    # Pushover 推送配置
+    PUSHOVER_USER_KEY = os.environ.get('READLATER_PUSHOVER_USER', '')
+    PUSHOVER_API_TOKEN = os.environ.get('READLATER_PUSHOVER_TOKEN', '')
+
+    # Bark 推送配置（iOS国内推荐）
+    BARK_URL = os.environ.get('READLATER_BARK_URL', '')
+
+    # Telegram 配置
+    TELEGRAM_BOT_TOKEN = os.environ.get('READLATER_TELEGRAM_BOT', '')
+    TELEGRAM_CHAT_ID = os.environ.get('READLATER_TELEGRAM_CHAT', '')
+
+    # API 服务器配置
+    API_HOST = os.environ.get('READLATER_API_HOST', '0.0.0.0')
+    API_PORT = int(os.environ.get('READLATER_API_PORT', '8080'))
+    API_KEY = os.environ.get('READLATER_API_KEY', '')  # API密钥，留空则不验证
+
+    # Notion 配置
+    NOTION_TOKEN = os.environ.get('NOTION_TOKEN', '')  # Notion Integration Token
+    NOTION_DATABASE_ID = os.environ.get('NOTION_DATABASE_ID', '')  # 数据库ID
+    NOTION_SYNC_ENABLED = os.environ.get('NOTION_SYNC_ENABLED', 'false').lower() == 'true'
+
     # 应用配置
     APP_NAME = "ReadLater"
-    VERSION = "1.0.0"
+    VERSION = "1.1.0"
 
     @classmethod
     def get_config_path(cls) -> Path:
@@ -69,13 +90,39 @@ class Config:
 ║   API Key:      {'已设置' if cls.ANTHROPIC_API_KEY else '未设置':<40} ║
 ║   模型:         {cls.ANTHROPIC_MODEL:<40} ║
 ╠══════════════════════════════════════════════════════════╣
-║ Webhook:        {'已配置' if cls.WEBHOOK_URL else '未配置':<40} ║
+║ 推送通知:                                                  ║
+║   Webhook:      {'已配置' if cls.WEBHOOK_URL else '未配置':<40} ║
+║   Pushover:     {'已配置' if cls.PUSHOVER_USER_KEY else '未配置':<40} ║
+║   Bark:         {'已配置' if cls.BARK_URL else '未配置':<40} ║
+║   Telegram:     {'已配置' if cls.TELEGRAM_BOT_TOKEN else '未配置':<40} ║
+╠══════════════════════════════════════════════════════════╣
+║ API服务器:                                                 ║
+║   地址:         {cls.API_HOST}:{cls.API_PORT:<33} ║
+║   API密钥:      {'已设置' if cls.API_KEY else '未设置(开放访问)':<40} ║
+╠══════════════════════════════════════════════════════════╣
+║ Notion 配置:                                              ║
+║   Token:        {'已设置' if cls.NOTION_TOKEN else '未设置':<40} ║
+║   数据库ID:     {'已设置' if cls.NOTION_DATABASE_ID else '未设置':<40} ║
+║   同步状态:     {'已启用' if cls.NOTION_SYNC_ENABLED else '未启用':<40} ║
 ╚══════════════════════════════════════════════════════════╝
 
 环境变量设置示例:
-  export READLATER_SUMMARIZER=openai
-  export OPENAI_API_KEY=sk-xxx
-  export READLATER_REMINDER_HOURS=12
+  # AI摘要
+  export READLATER_SUMMARIZER=anthropic
+  export ANTHROPIC_API_KEY=sk-ant-xxx
+
+  # 推送通知（选择一种）
+  export READLATER_BARK_URL=https://api.day.app/your_key
+  export READLATER_PUSHOVER_USER=xxx
+  export READLATER_PUSHOVER_TOKEN=xxx
+
+  # Notion 集成
+  export NOTION_TOKEN=secret_xxx
+  export NOTION_DATABASE_ID=xxx
+  export NOTION_SYNC_ENABLED=true
+
+  # API服务器
+  export READLATER_API_KEY=your_secret_key
 """
 
 
